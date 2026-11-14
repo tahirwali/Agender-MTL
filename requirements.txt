@@ -1,0 +1,11 @@
+# Kaggle already provides numpy, pandas, scipy, scikit-learn, matplotlib, lightgbm, xgboost, catboost, requests.
+numpy
+pandas
+scipy
+scikit-learn
+matplotlib
+lightgbm
+xgboost
+catboost
+requests
+pytest
