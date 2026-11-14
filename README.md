@@ -16,6 +16,7 @@ Everything runs on Kaggle's free tier, on the CPU.
 |---|---|---|---|
 | 0 | `step0_data.ipynb` | Downloads LAT from PLOS and describes it (rows, labels, age groups, missing cells) | < 1 min |
 | 1 | `step1_benchmark.ipynb` | Preprocessing, QUBO selection, multi-task network and baselines for the 3-, 6-, 10- and 48-class age schemes; QUBO sensitivity sweep | 30-45 min |
+| 2 | `step2_oversampling.ipynb` | Oversampling the rare age groups: SMOTE, SMOTE-NC, Borderline-SMOTE, ADASYN, random oversampling and CTGAN, against class weights alone | 2-3 h |
 
 ## Data
 
@@ -25,8 +26,9 @@ downloaded by Step 0 and is not stored here. See `docs/datasets.md`.
 ## Running it
 
 1. Zip this folder and upload it to Kaggle as a dataset named `agender-mtl-code`.
-2. Import a notebook from `notebooks/` and add `agender-mtl-code` as an input. Step 1 also needs the saved
-   output of Step 0 (`agender-mtl-step0`).
+2. Import a notebook from `notebooks/` and add `agender-mtl-code` as an input. Steps 1 and 2 also need the output of
+   Step 0: either save it as the dataset `agender-mtl-step0`, or attach the Step 0 notebook itself
+   (Add Input -> Notebooks). Step 2 needs the internet on, only to install `ctgan`.
 3. Use **Save Version -> Save & Run All**.
 
 Every number and figure is written by the notebooks; no result is typed by hand. Settings are chosen on the
@@ -43,7 +45,7 @@ python -m pytest tests
 
 ```
 agender_mtl/   the package: data, benchmark (preprocessing, models, age schemes, sweep), multi-task network,
-               QUBO selection, metrics, step runner
+               QUBO selection, oversampling, metrics, step runner
 notebooks/     one Kaggle notebook per step
 tests/         offline tests
 docs/          one note per step and the data note
