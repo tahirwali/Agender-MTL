@@ -12,3 +12,4 @@ catboost_info/
 paper/
 scripts/
 docs/PROGRESS_LOG.md
+outputs_local/

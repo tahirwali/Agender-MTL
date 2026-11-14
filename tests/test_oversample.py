@@ -102,3 +102,24 @@ def test_step2_end_to_end(tmp_path):
     assert set(paired["method"]) == {"SMOTE-NC", "SMOTE, earlier setting"}
     scores = pd.read_csv(tmp_path / "scores.csv")
     assert "recall <18" in scores.columns and scores.query("task == 'age'")["rare_recall"].notna().all()
+
+
+def test_iranian_churn_cleaning_and_step3(tmp_path):
+    from agender_mtl import churn, step3
+    rng = np.random.default_rng(5)
+    n = 400
+    group = rng.choice([1, 2, 3, 4, 5], n, p=[0.05, 0.3, 0.4, 0.15, 0.1])
+    raw = pd.DataFrame({"Call  Failure": rng.poisson(5, n), "Seconds of Use": rng.exponential(3000, n).round(),
+                        "Frequency of SMS": rng.poisson(50 + 20 * group), "Tariff Plan": rng.integers(1, 3, n),
+                        "Age Group": group, "Age": np.array([15, 25, 30, 45, 55])[group - 1],
+                        "Customer Value": rng.exponential(400, n)})
+    raw["Status"] = rng.integers(1, 3, n)
+    raw = pd.concat([raw, raw.iloc[:20]], ignore_index=True)           # 20 exact copies
+    table = churn.clean(raw)
+    summary = churn.describe(raw, table)
+    assert summary["exact_copies_removed"] == 20 and "AGE" in table and "SEED" not in table
+    assert "Age" not in table.columns and "CUSTOMER_VALUE" not in table and table["AGE"].between(0, 4).all()
+    assert set(churn.formula_check(raw)) and churn.near_copy_check(table)["groups"] > 0
+    assert summary["age_values_per_group"][3] == [30]
+    result = step3.run(table, tmp_path, seeds=(42,), epochs=3, methods=["none", "SMOTE-NC"])
+    assert "MTL (age head) / SMOTE-NC" in result["test_means"] and (tmp_path / "paired.csv").exists()

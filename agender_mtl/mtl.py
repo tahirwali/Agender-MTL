@@ -7,6 +7,7 @@ backpropagation.
     age head     : [32 + detached gender probability] = 33 -> 16 -> C   (ReLU, softmax)
 
 Loss 2 * L_gender + L_age, both class-weighted by softened inverse frequency (power 0.5).
+For a table without gender, gender_weight=0 trains the age head alone (the gender head then learns nothing).
 AdamW, learning rate 1e-3 -> 1e-5 by a cosine schedule over 150 epochs, weight decay 5e-4,
 batch 256; the weights with the lowest validation loss are kept.
 """
@@ -21,7 +22,8 @@ def class_weights(labels, n_classes, power=0.5):
 
 
 class MultiTaskNet:
-    def __init__(self, n_inputs, n_age, trunk=(64, 32), age_hidden=16, dropout=0.3, seed=0):
+    def __init__(self, n_inputs, n_age, trunk=(64, 32), age_hidden=16, dropout=0.3, seed=0, gender_weight=2.0):
+        self.gender_weight = gender_weight
         self.rng = np.random.default_rng(seed)
         self.dropout = dropout
         shapes = {"W1": (n_inputs, trunk[0]), "W2": (trunk[0], trunk[1]), "Wg": (trunk[1], 1),
@@ -61,13 +63,12 @@ class MultiTaskNet:
         return p_gender, p_age
 
     # ---- loss and gradients ----
-    @staticmethod
-    def loss(p_gender, p_age, y_gender, y_age, w_gender, w_age):
+    def loss(self, p_gender, p_age, y_gender, y_age, w_gender, w_age):
         eps = 1e-12
         sw_g, sw_a = w_gender[y_gender], w_age[y_age]
         l_gender = -np.mean(sw_g * (y_gender * np.log(p_gender + eps) + (1 - y_gender) * np.log(1 - p_gender + eps)))
         l_age = -np.mean(sw_a * np.log(p_age[np.arange(len(y_age)), y_age] + eps))
-        return 2 * l_gender + l_age
+        return self.gender_weight * l_gender + l_age
 
     def _gradients(self, cache, y_gender, y_age, w_gender, w_age):
         p = self.params
@@ -83,8 +84,8 @@ class MultiTaskNet:
         grads["Wa1"] = cache["age_input"].T @ d_za1
         grads["ba1"] = d_za1.sum(axis=0)
         upstream = (d_za1 @ p["Wa1"].T)[:, :-1]      # drop the detached gender column
-        # gender head: weighted binary cross-entropy through sigmoid, times 2
-        d_zg = (2 * w_gender[y_gender] * (cache["p_gender"] - y_gender) / n)[:, None]
+        # gender head: weighted binary cross-entropy through sigmoid, times the gender weight
+        d_zg = (self.gender_weight * w_gender[y_gender] * (cache["p_gender"] - y_gender) / n)[:, None]
         grads["Wg"] = cache["h2"].T @ d_zg
         grads["bg"] = d_zg.sum(axis=0)
         upstream = upstream + d_zg @ p["Wg"].T
