@@ -6,7 +6,7 @@ Validation and test rows are never touched.
 
 Which label is balanced. The network predicts gender and age together, so a new row needs both labels.
 Most methods here balance the joint label (gender x age group): a synthetic row is made from rows of the
-same gender and the same age group, so it carries both labels and the gender balance does not move.
+same gender and the same age group, so it carries both labels and the gender balance barely moves.
 Two methods balance the age label alone, as the earlier SMOTE study did; there the gender of a new row is
 decided by its neighbours, like any other attribute.
 

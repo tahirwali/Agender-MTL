@@ -44,8 +44,10 @@ def latex_table(frame, caption, label, bold_best=None, lower_better=(), wide=Fal
     """frame: first column = row names, other columns = numbers (float) or ready strings."""
     env = "table*" if wide else "table"
     columns = list(frame.columns)
-    lines = [rf"\begin{{{env}}}[h]", r"\centering", rf"\caption{{{caption}}}\label{{{label}}}",
-             r"\small\setlength{\tabcolsep}{4pt}", r"\begin{tabular}{l" + "c" * (len(columns) - 1) + "}", r"\toprule",
+    # a wide table shrinks to the text width (needs \usepackage{adjustbox})
+    lines = [rf"\begin{{{env}}}[!htbp]", r"\centering", rf"\caption{{{caption}}}\label{{{label}}}",
+             r"\small\setlength{\tabcolsep}{4pt}", r"\begin{adjustbox}{max width=\linewidth}",
+             r"\begin{tabular}{l" + "c" * (len(columns) - 1) + "}", r"\toprule",
              " & ".join(escape(c) for c in columns) + r"\\", r"\midrule"]
     best = {}
     for c in columns[1:]:
@@ -66,7 +68,7 @@ def latex_table(frame, caption, label, bold_best=None, lower_better=(), wide=Fal
                 text = rf"\textbf{{{text}}}"
             cells.append(text)
         lines.append(" & ".join(cells) + r"\\")
-    lines += [r"\bottomrule", r"\end{tabular}"]
+    lines += [r"\bottomrule", r"\end{tabular}", r"\end{adjustbox}"]
     if note:
         lines.append(rf"\\[2pt]\parbox{{0.95\linewidth}}{{\footnotesize {note}}}")
     lines.append(rf"\end{{{env}}}")
@@ -305,13 +307,14 @@ def step1_outputs(step1_dir, fig_dir, table_dir):
         body.append(rf"\multicolumn{{8}}{{l}}{{\emph{{{title}}}}}\\")
         body += lines[start:end] + [r"\midrule"]
     header = " & ".join(escape(c) for c in ["Model", "Acc", "+-1", "Bal.", "mF1", "wF1", "AUC OvR", "ECE"]) + r"\\"
-    tex = "\n".join([r"\begin{table*}[h]", r"\centering",
+    tex = "\n".join([r"\begin{table*}[!htbp]", r"\centering",
                      r"\caption{Age classification over different class settings on the LAT public feature set (mean over five "
                      r"seeds). Acc: exact accuracy; $\pm1$: adjacent-class tolerance; Bal.: balanced accuracy; mF1/wF1: "
                      r"macro/weighted $F_1$; AUC OvR: one-vs-rest AUC; ECE: Expected Calibration Error (lower is better). "
                      r"Best per column within each class setting in \textbf{bold}.}\label{tab:granfull}",
-                     r"\small\setlength{\tabcolsep}{5pt}", r"\begin{tabular}{lccccccc}", r"\toprule", header, r"\midrule"]
-                    + body[:-1] + [r"\bottomrule", r"\end{tabular}", r"\end{table*}"]) + "\n"
+                     r"\small\setlength{\tabcolsep}{5pt}", r"\begin{adjustbox}{max width=\linewidth}",
+                     r"\begin{tabular}{lccccccc}", r"\toprule", header, r"\midrule"]
+                    + body[:-1] + [r"\bottomrule", r"\end{tabular}", r"\end{adjustbox}", r"\end{table*}"]) + "\n"
     table_dir.mkdir(parents=True, exist_ok=True)
     (table_dir / "table_schemes.tex").write_text(tex, encoding="utf-8")
     full.to_csv(table_dir / "table_schemes.csv", index=False)
@@ -405,7 +408,7 @@ def step2_outputs(step2_dir, fig_dir, table_dir):
                 g = gender[gender["method"] == method]
                 if a.empty:
                     continue
-                rows.append({"Model": f"{scheme} classes, {SHOWN.get(model, model)}: {method}",
+                rows.append({"Setting": f"{scheme} classes, {SHOWN.get(model, model)}: {method}",
                              "macro-F1": a["macro_f1"].mean(), "Balanced": a["balanced"].mean(),
                              "Rare-group recall": a["rare_recall"].mean(), "+-1-bin": a["within_1"].mean(),
                              "Age ECE": a["ece"].mean(), "Gender AUC": g["auc"].mean()})
@@ -421,7 +424,7 @@ def step2_outputs(step2_dir, fig_dir, table_dir):
         table = []
         for model in ("MTL", "Gradient Boosting"):
             for method in order[1:]:
-                row = {"Model": f"{SHOWN.get(model, model)}: {method}"}
+                row = {"Setting": f"{SHOWN.get(model, model)}: {method}"}
                 for measure, title in (("macro_f1", "macro-F1"), ("rare_recall", "Rare-group recall"), ("ece", "ECE")):
                     r = part[(part["model"] == model) & (part["method"] == method) & (part["measure"] == measure)]
                     if r.empty:
@@ -482,7 +485,7 @@ def step2_outputs(step2_dir, fig_dir, table_dir):
     quality = records.groupby(["scheme", "method"])[["rows_added", "seconds", "male_share_before", "male_share_after",
                                                      "distance_ratio", "discriminator_auc"]].mean().reset_index()
     quality = quality[quality["method"] != "none"]
-    frame = pd.DataFrame({"Model": quality["scheme"] + " classes: " + quality["method"],
+    frame = pd.DataFrame({"Setting": quality["scheme"] + " classes: " + quality["method"],
                           "Rows added": quality["rows_added"].round(0).astype(int).astype(str),
                           "Male share before": quality["male_share_before"], "Male share after": quality["male_share_after"],
                           "Distance ratio": quality["distance_ratio"], "Discriminator AUC": quality["discriminator_auc"],
@@ -515,7 +518,7 @@ def step3_outputs(step3_dir, table_dir):
     write_table(table_dir, "table_iranian", frame, bold_best=True, lower_better=("ECE",), label="tab:iranian", wide=True,
                 caption="External check on Iranian Churn: five age groups, no gender (test rows, mean over five seeds).")
     over = means[means["method"] != "none"].copy()
-    frame2 = pd.DataFrame({"Model": over["model"].str.replace("MTL (age head)", "MTL", regex=False) + ": " + over["method"],
+    frame2 = pd.DataFrame({"Setting": over["model"].str.replace("MTL (age head)", "MTL", regex=False) + ": " + over["method"],
                            "macro-F1": over["macro_f1 mean"], "Balanced": over["balanced mean"],
                            "Rare-group recall": over["rare_recall mean"], "ECE": over["ece mean"]})
     write_table(table_dir, "table_iranian_oversampling", frame2, label="tab:iranian_os",

@@ -38,7 +38,8 @@ training) and the test rows (used to score) are always real subscribers.
 **Why the joint label.** The network predicts gender and age together, so every new training row needs both
 labels. If only the age label is balanced, the new rows can also change the share of men and women.
 Balancing the joint label (gender x age group) makes each new row from rows of the same gender and the same
-age group, so it has both labels and the gender balance stays as it was. "SMOTE-NC, age label only" measures
+age group, so it has both labels and the gender balance barely moves (the raised classes of men and women grow
+to the same size, so the share of men moves a little toward one half). "SMOTE-NC, age label only" measures
 what happens without this choice. "SMOTE, earlier setting" repeats the earlier SMOTE study of this work.
 
 **Why these methods.** SMOTE (Chawla et al., 2002) is where most studies start. SMOTE-NC is the version for
