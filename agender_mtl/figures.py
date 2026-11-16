@@ -20,23 +20,81 @@ from agender_mtl import benchmark, metrics, qubo, step2
 from agender_mtl.mtl import MultiTaskNet
 
 COLOURS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6"]
-GREY = "#52514e"
+BLACK = "#000000"
 MODELS = ["Logistic Regression", "Random Forest", "Gradient Boosting", "MTL"]
-SHOWN = {"MTL": "MTL (proposed)"}
-plt.rcParams.update({"font.size": 9, "axes.spines.top": False, "axes.spines.right": False,
-                     "axes.edgecolor": GREY, "axes.labelcolor": "#0b0b0b", "xtick.color": GREY,
-                     "ytick.color": GREY, "axes.grid": False, "savefig.dpi": 300, "figure.dpi": 100})
+# names as they are printed in tables and figures: the journal wants only the first word capitalized
+SHOWN = {"Logistic Regression": "Logistic regression", "Random Forest": "Random forest",
+         "Gradient Boosting": "Gradient boosting", "MTL": "MTL (proposed)"}
+
+# The journal (Big Data Mining and Analytics) asks for figures 8 cm wide (one column) or 16 cm wide
+# (two columns), Times New Roman at 10 pt for every word and number, bold axes, black lines of medium
+# width, no background, and 600 dpi. The figures are drawn at their printed size, so the article
+# includes them without scaling and the text stays at 10 pt.
+CM = 1 / 2.54
+ONE_COLUMN = 8 * CM
+TWO_COLUMNS = 16 * CM
+plt.rcParams.update({
+    "font.family": "serif",
+    # Kaggle has no Times New Roman; Nimbus Roman, Liberation Serif and STIX have the same letter widths
+    "font.serif": ["Times New Roman", "Times", "Nimbus Roman", "Nimbus Roman No9 L", "Liberation Serif",
+                   "STIXGeneral", "DejaVu Serif"],
+    "mathtext.fontset": "stix",
+    "font.size": 10, "axes.titlesize": 10, "axes.labelsize": 10, "xtick.labelsize": 10, "ytick.labelsize": 10,
+    "legend.fontsize": 10, "legend.title_fontsize": 10, "figure.titlesize": 10,
+    "axes.linewidth": 1.5, "axes.edgecolor": BLACK, "axes.labelcolor": BLACK, "text.color": BLACK,
+    "xtick.color": BLACK, "ytick.color": BLACK, "xtick.major.width": 1.5, "ytick.major.width": 1.5,
+    "xtick.major.size": 4, "ytick.major.size": 4, "lines.linewidth": 1.5,
+    "axes.spines.top": False, "axes.spines.right": False, "axes.grid": False,
+    "axes.titlelocation": "left", "legend.frameon": False,
+    "figure.facecolor": "white", "savefig.facecolor": "white", "figure.dpi": 100, "savefig.dpi": 600,
+    "pdf.fonttype": 42, "ps.fonttype": 42,
+})
+
+
+def new_figure(width, height_cm, rows=1, columns=1, **kwargs):
+    """A figure of exactly `width` (inches) by `height_cm`; constrained layout keeps every label inside."""
+    return plt.subplots(rows, columns, figsize=(width, height_cm * CM), layout="constrained", **kwargs)
 
 
 def save(fig, folder, name):
+    # no tight bounding box: the saved file keeps the 8 cm or 16 cm width set in new_figure
     folder.mkdir(parents=True, exist_ok=True)
-    fig.savefig(folder / f"{name}.pdf", bbox_inches="tight")
-    fig.savefig(folder / f"{name}.png", bbox_inches="tight")
+    fig.savefig(folder / f"{name}.pdf")
+    fig.savefig(folder / f"{name}.png")
     plt.close(fig)
 
 
+def thousands(axis):
+    """Tick labels with a comma between groups of three digits (1,630 rather than 1630)."""
+    axis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+
+
+def first_capital(text):
+    """'random oversampling' -> 'Random oversampling' (the rest is left as it is: SMOTE-NC stays)."""
+    text = str(text)
+    return text[:1].upper() + text[1:]
+
+
+PROPER = {"instagram": "Instagram", "whatsapp": "WhatsApp", "uber": "Uber", "mb": "MB", "gsm": "GSM"}
+
+
+def readable(name):
+    """SOCIAL_NETWORK_MB -> 'Social network (MB)'; DEVICE_TYPE=GSMmodule -> 'Device type = GSMmodule'."""
+    name, _, level = str(name).partition("=")
+    words = [PROPER.get(w, w) for w in name.lower().split("_")]
+    unit = ""
+    if words[-1] == "MB" and len(words) > 1:
+        unit, words = " (MB)", words[:-1]
+    text = " ".join(words) + unit
+    text = text[0].upper() + text[1:]
+    return f"{text} = {level}" if level else text
+
+
 def escape(text):
-    return (str(text).replace("\\", r"\textbackslash{}").replace("%", r"\%").replace("&", r"\&")
+    text = str(text)
+    if len(text) > 1 and text.startswith("$") and text.endswith("$"):     # already LaTeX math
+        return text
+    return (text.replace("\\", r"\textbackslash{}").replace("%", r"\%").replace("&", r"\&")
             .replace("_", r"\_").replace("#", r"\#").replace("<", "$<$").replace(">", "$>$").replace("+-", r"$\pm$"))
 
 
@@ -45,8 +103,9 @@ def latex_table(frame, caption, label, bold_best=None, lower_better=(), wide=Fal
     env = "table*" if wide else "table"
     columns = list(frame.columns)
     # a wide table shrinks to the text width (needs \usepackage{adjustbox})
+    # normal size type: the journal wants the words and numbers of tables at 10 pt
     lines = [rf"\begin{{{env}}}[!htbp]", r"\centering", rf"\caption{{{caption}}}\label{{{label}}}",
-             r"\small\setlength{\tabcolsep}{4pt}", r"\begin{adjustbox}{max width=\linewidth}",
+             r"\setlength{\tabcolsep}{4pt}", r"\begin{adjustbox}{max width=\linewidth}",
              r"\begin{tabular}{l" + "c" * (len(columns) - 1) + "}", r"\toprule",
              " & ".join(escape(c) for c in columns) + r"\\", r"\midrule"]
     best = {}
@@ -84,29 +143,36 @@ def write_table(folder, name, frame, **kwargs):
 # ---- data description ----
 
 def data_figures(raw, out):
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.6))
+    # one column: the two panels are stacked
+    fig, axes = new_figure(ONE_COLUMN, 11, rows=2)
     counts = raw["GENDER"].map({"F": "Female", "M": "Male"}).value_counts().reindex(["Female", "Male"])
-    axes[0].bar(counts.index, counts.values, color=COLOURS[:2], width=0.6)
+    axes[0].bar(counts.index, counts.values, color=COLOURS[:2], width=0.5)
     for i, v in enumerate(counts.values):
-        axes[0].text(i, v, f"{v:,}\n({v / counts.sum():.1%})", ha="center", va="bottom", fontsize=8)
+        axes[0].text(i, v, f"{v:,} ({v / counts.sum():.1%})", ha="center", va="bottom")
     axes[0].set_ylabel("Subscribers")
-    axes[0].set_title("(a) Gender", loc="left")
-    axes[0].set_ylim(0, counts.max() * 1.25)
+    axes[0].set_title("(a) Gender")
+    axes[0].set_ylim(0, counts.max() * 1.2)
+    thousands(axes[0].yaxis)
     groups = pd.Series(benchmark.age_classes(raw["AGE"], "6")).map(dict(enumerate(benchmark.AGE_NAMES)))
     groups = groups.value_counts().reindex(benchmark.AGE_NAMES)
     axes[1].bar(groups.index, groups.values, color=COLOURS[0], width=0.6)
     for i, v in enumerate(groups.values):
-        axes[1].text(i, v, f"{v / groups.sum():.1%}", ha="center", va="bottom", fontsize=8)
-    axes[1].set_title("(b) Six age groups", loc="left")
+        axes[1].text(i, v, f"{v / groups.sum():.0%}", ha="center", va="bottom")
+    axes[1].set_ylabel("Subscribers")
+    axes[1].set_xlabel("Age group (years)")
+    axes[1].set_title("(b) Six age groups")
     axes[1].set_ylim(0, groups.max() * 1.18)
+    thousands(axes[1].yaxis)
     save(fig, out, "fig_data_distribution")
 
     numeric = raw.select_dtypes("number").drop(columns=["AGE"])
     corr = numeric.corr(method="pearson")
-    fig, ax = plt.subplots(figsize=(7.2, 6.2))
+    names = [readable(c) for c in corr.columns]
+    fig, ax = new_figure(TWO_COLUMNS, 15)
     image = ax.imshow(corr.values, cmap="RdBu_r", vmin=-1, vmax=1)
-    ax.set_xticks(range(len(corr)), corr.columns, rotation=90, fontsize=6)
-    ax.set_yticks(range(len(corr)), corr.columns, fontsize=6)
+    ax.set_xticks(range(len(corr)), names, rotation=90)
+    ax.set_yticks(range(len(corr)), names)
+    ax.spines[:].set_visible(False)
     fig.colorbar(image, ax=ax, fraction=0.04, label="Pearson correlation")
     save(fig, out, "fig_correlation")
     corr.to_csv(out / "fig_correlation.csv")
@@ -162,49 +228,58 @@ def model_figures(model, scheme, out):
     panels = [("age", model["age"], model["p_age"].argmax(1), names)]
     if scheme == "6":
         panels.append(("gender", model["male"], (model["p_male"] >= 0.5).astype(int), ["Female", "Male"]))
+    # widths in the article: six-group age 9 cm next to gender 7 cm; ten groups 10 cm next to its loss curve
+    sizes = {("age", "6"): (9, 8.5), ("gender", "6"): (7, 6.5), ("age", "10"): (10, 9.5)}
     for task, truth, predicted, labels in panels:
         matrix = confusion_matrix(truth, predicted, labels=range(len(labels)))
         share = matrix / np.maximum(matrix.sum(axis=1, keepdims=True), 1)
-        size = 3.2 if task == "gender" else (4.2 if len(labels) <= 6 else 5.6)
-        fig, ax = plt.subplots(figsize=(size, size * 0.9))
+        width, height = sizes[(task, scheme)]
+        fig, ax = new_figure(width * CM, height)
         ax.imshow(share, cmap="Blues", vmin=0, vmax=1)
+        crowded = len(labels) > 6        # ten groups: a 10 pt count and share do not fit in one cell
         for i in range(len(labels)):
             for j in range(len(labels)):
-                ax.text(j, i, f"{matrix[i, j]}\n{share[i, j]:.0%}", ha="center", va="center", fontsize=6.5,
-                        color="white" if share[i, j] > 0.55 else "#0b0b0b")
-        ax.set_xticks(range(len(labels)), labels, rotation=45 if len(labels) > 6 else 0)
+                text = f"{100 * share[i, j]:.0f}" if crowded else f"{matrix[i, j]:,}\n{share[i, j]:.0%}"
+                ax.text(j, i, text, ha="center", va="center", color="white" if share[i, j] > 0.55 else BLACK)
+        ax.set_xticks(range(len(labels)), labels, rotation=90 if crowded else 0)
         ax.set_yticks(range(len(labels)), labels)
-        ax.set_xlabel("Predicted")
-        ax.set_ylabel("True")
+        ax.set_xlabel("Predicted group" if task == "age" else "Predicted")
+        ax.set_ylabel("True group" if task == "age" else "True")
         ax.spines[:].set_visible(False)
+        ax.tick_params(length=0)
         save(fig, out, f"fig_confusion_{task}_{tag}")
         pd.DataFrame(matrix, index=labels, columns=labels).to_csv(out / f"fig_confusion_{task}_{tag}.csv")
 
     # one-vs-rest ROC of the network, one curve per age group
-    fig, ax = plt.subplots(figsize=(3.8, 3.4))
+    many = len(names) > 6
+    fig, ax = new_figure(ONE_COLUMN, 12.5 if many else 8)
     rows = []
     for c, label in enumerate(names):
         positive = model["age"] == c
         if positive.any() and not positive.all():
             fpr, tpr, _ = roc_curve(positive, model["p_age"][:, c])
             auc = np.trapezoid(tpr, fpr)
-            ax.plot(fpr, tpr, lw=1.5, color=COLOURS[c % len(COLOURS)], label=f"{label} ({auc:.3f})",
+            # past the seventh colour the curves are dashed, so no two look the same in print
+            ax.plot(fpr, tpr, color=COLOURS[c % len(COLOURS)], label=f"{label} ({auc:.3f})",
                     ls="-" if c < len(COLOURS) else "--")
             rows.append({"group": label, "auc": auc})
-    ax.plot([0, 1], [0, 1], color=GREY, lw=0.8, ls=":")
+    ax.plot([0, 1], [0, 1], color=BLACK, lw=1.0, ls=":")
     ax.set_xlabel("False positive rate")
     ax.set_ylabel("True positive rate")
-    ax.legend(fontsize=6.5, frameon=False, title="Age group (AUC)", title_fontsize=7)
+    if many:
+        fig.legend(title="Age group (AUC)", loc="outside lower center", ncol=2, handlelength=1.6, columnspacing=1.0)
+    else:
+        ax.legend(title="Age group (AUC)", loc="lower right", handlelength=1.4, borderaxespad=0.2)
     save(fig, out, f"fig_roc_age_{tag}")
     pd.DataFrame(rows).to_csv(out / f"fig_roc_age_{tag}.csv", index=False)
     if scheme == "6":
-        fig, ax = plt.subplots(figsize=(3.4, 3.2))
+        fig, ax = new_figure(ONE_COLUMN, 8)
         fpr, tpr, _ = roc_curve(model["male"], model["p_male"])
-        ax.plot(fpr, tpr, lw=1.8, color=COLOURS[0], label=f"MTL (AUC {np.trapezoid(tpr, fpr):.3f})")
-        ax.plot([0, 1], [0, 1], color=GREY, lw=0.8, ls=":")
+        ax.plot(fpr, tpr, color=BLACK, label=f"MTL (AUC {np.trapezoid(tpr, fpr):.3f})")
+        ax.plot([0, 1], [0, 1], color=BLACK, lw=1.0, ls=":")
         ax.set_xlabel("False positive rate")
         ax.set_ylabel("True positive rate")
-        ax.legend(frameon=False, fontsize=7)
+        ax.legend(loc="lower right")
         save(fig, out, "fig_roc_gender_6class")
 
 
@@ -212,28 +287,28 @@ def feature_figures(model, out):
     relevance = pd.DataFrame({"attribute": model["all_names"], "relevance": model["relevance"]})
     relevance["chosen"] = relevance.index.isin(model["chosen"])
     relevance = relevance.sort_values("relevance", ascending=True)
-    fig, ax = plt.subplots(figsize=(4.6, 7.0))
-    ax.barh(relevance["attribute"], relevance["relevance"],
+    # one column wide, next to the importance panels; one 10 pt row per attribute
+    fig, ax = new_figure(ONE_COLUMN, max(8, 0.42 * len(relevance) + 2.5))
+    ax.barh([readable(a) for a in relevance["attribute"]], relevance["relevance"],
             color=[COLOURS[0] if c else "#c3c2b7" for c in relevance["chosen"]], height=0.7)
-    ax.tick_params(axis="y", labelsize=5.5)
-    ax.set_xlabel("Relevance to gender x age group (NMI)")
-    ax.scatter([], [], color=COLOURS[0], marker="s", label="chosen by QUBO")
-    ax.scatter([], [], color="#c3c2b7", marker="s", label="not chosen")
-    ax.legend(frameon=False, fontsize=7, loc="lower right")
+    ax.set_ylim(-0.6, len(relevance) - 0.4)
+    ax.set_xlabel("Relevance to gender × age group (NMI)")
+    ax.scatter([], [], color=COLOURS[0], marker="s", label="Chosen by QUBO")
+    ax.scatter([], [], color="#c3c2b7", marker="s", label="Not chosen")
+    ax.legend(loc="lower right", handletextpad=0.2, borderaxespad=0.2)
     save(fig, out, "fig_qubo_relevance")
     relevance.to_csv(out / "fig_qubo_relevance.csv", index=False)
 
     importance = permutation_importance(model)
     importance.to_csv(out / "fig_importance.csv", index=False)
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 4.6), sharey=False)
+    # the two panels are stacked so that the attribute names fit in one column at 10 pt
+    fig, axes = new_figure(ONE_COLUMN, max(8, 0.42 * len(relevance) + 2.5), rows=2)
     for ax, column, title, colour in ((axes[0], "age_macro_f1_drop", "Age: drop in macro-F1", COLOURS[0]),
                                       (axes[1], "gender_auc_drop", "Gender: drop in AUC", COLOURS[1])):
         top = importance.sort_values(column).tail(12)
-        ax.barh(top["attribute"], top[column], color=colour, height=0.7)
-        ax.axvline(0, color=GREY, lw=0.8)
-        ax.tick_params(axis="y", labelsize=6)
-        ax.set_title(title, loc="left")
-    fig.tight_layout()
+        ax.barh([readable(a) for a in top["attribute"]], top[column], color=colour, height=0.7)
+        ax.axvline(0, color=BLACK, lw=1.0)
+        ax.set_title(title)
     save(fig, out, "fig_importance")
 
 
@@ -256,9 +331,9 @@ def step1_outputs(step1_dir, fig_dir, table_dir):
     rows = []
     for model in MODELS:
         row = {"Model": SHOWN.get(model, model)}
-        for measure, title in (("accuracy", "Gender Acc."), ("f1", "Gender F1"), ("auc", "Gender AUC")):
+        for measure, title in (("accuracy", "Gender acc."), ("f1", "Gender F1"), ("auc", "Gender AUC")):
             row[title] = mean_sd(m6, "gender", model, measure)
-        for measure, title in (("accuracy", "Age Acc."), ("within_1", "+-1-bin"), ("macro_f1", "macro-F1"),
+        for measure, title in (("accuracy", "Age acc."), ("within_1", "+-1-bin"), ("macro_f1", "Macro-F1"),
                                ("balanced", "Balanced"), ("auc_ovr", "AUC OvR")):
             row[title] = mean_sd(m6, "age", model, measure)
         rows.append(row)
@@ -336,7 +411,7 @@ def step1_outputs(step1_dir, fig_dir, table_dir):
              "10 / accuracy": ("10-class (Kuang exact)", "exact accuracy", "Kuang 0.184-0.259"),
              "48 / within_5": ("48-bin (Kuang +-5 yr)", "+-5-year tolerance", "Kuang 0.78")}
     rows = [{"Approach (classes)": prior[key][0], "Metric": prior[key][1], "Our best": f"{value:.3f} ({who})",
-             "Prior Work": prior[key][2]} for key, (value, who) in comparison.items()]
+             "Prior work": prior[key][2]} for key, (value, who) in comparison.items()]
     write_table(table_dir, "table_comparison", pd.DataFrame(rows), label="tab:gran",
                 caption="Age prediction on the publicly available atomic features (five seeds average). \"Our best\" shows the "
                         "best results achieved either by MTL or the baselines (Logistic Regression, Random Forest, Gradient "
@@ -349,14 +424,16 @@ def step1_outputs(step1_dir, fig_dir, table_dir):
         if not path.exists():
             continue
         loss = pd.read_csv(path)
-        fig, ax = plt.subplots(figsize=(4.2, 2.9))
-        for column, colour, name in (("train_loss", COLOURS[0], "Training"), ("validation_loss", COLOURS[1], "Validation")):
+        # 8 cm for six groups (one column); 6 cm for ten groups, next to the 10 cm confusion matrix
+        fig, ax = new_figure(ONE_COLUMN if scheme == "6" else 6 * CM, 6.5 if scheme == "6" else 9.5)
+        # black lines, solid and dashed, so the two curves read apart in print too
+        for column, style, name in (("train_loss", "-", "Training"), ("validation_loss", "--", "Validation")):
             pivot = loss.pivot(index="epoch", columns="seed", values=column)
-            ax.plot(pivot.index + 1, pivot.mean(axis=1), color=colour, lw=1.8, label=name)
-            ax.fill_between(pivot.index + 1, pivot.min(axis=1), pivot.max(axis=1), color=colour, alpha=0.15, lw=0)
+            ax.plot(pivot.index + 1, pivot.mean(axis=1), color=BLACK, ls=style, label=name)
+            ax.fill_between(pivot.index + 1, pivot.min(axis=1), pivot.max(axis=1), color=BLACK, alpha=0.12, lw=0)
         ax.set_xlabel("Epoch")
         ax.set_ylabel("Weighted loss")
-        ax.legend(frameon=False)
+        ax.legend()
         save(fig, fig_dir, f"fig_loss_{scheme}class")
 
     # QUBO sweep
@@ -364,24 +441,28 @@ def step1_outputs(step1_dir, fig_dir, table_dir):
     if sweep_path.exists():
         sweep = pd.read_csv(sweep_path)
         defaults = benchmark.DEFAULTS
-        fig, axes = plt.subplots(1, 4, figsize=(7.4, 2.2), sharey=True)
+        # one column: four panels in a 2 x 2 grid
+        fig, axes = new_figure(ONE_COLUMN, 9, rows=2, columns=2, sharey=True)
         rows = []
-        for ax, name in zip(axes, ["k", "beta", "lam", "alpha"]):
+        symbols = {"k": "$k$", "beta": r"$\beta$", "lam": r"$\lambda$", "alpha": r"$\alpha$"}
+        for ax, name in zip(axes.flat, ["k", "beta", "lam", "alpha"]):
             others = [o for o in defaults if o != name]
             part = sweep[np.all([np.isclose(sweep[o], defaults[o]) for o in others], axis=0)].sort_values(name)
-            ax.errorbar(part[name], part["mean"], yerr=part["std"], color=COLOURS[0], marker="o", ms=4, lw=1.5, capsize=2)
-            ax.axvline(defaults[name], color=GREY, lw=0.8, ls=":")
-            ax.set_xlabel({"k": "k", "beta": "beta", "lam": "lambda", "alpha": "alpha"}[name])
+            ax.errorbar(part[name], part["mean"], yerr=part["std"], color=BLACK, marker="o", ms=4, capsize=2)
+            ax.axvline(defaults[name], color=BLACK, lw=1.0, ls=":")
+            ax.set_xlabel(symbols[name])
             for _, r in part.iterrows():
                 rows.append({"Weight": name, "Value": r[name], "Validation macro-F1": r["mean"], "SD": r["std"]})
-        axes[0].set_ylabel("Validation macro-F1")
-        fig.tight_layout()
+        for ax in axes[:, 0]:
+            ax.set_ylabel("Validation macro-F1")
         save(fig, fig_dir, "fig_qubo_sweep")
         frame = pd.DataFrame(rows)
-        frame["Weight"] = frame["Weight"].map({"k": "k", "beta": "beta", "lam": "lambda", "alpha": "alpha"}) + " = " + frame["Value"].map(lambda v: f"{v:g}")
+        frame["Weight"] = "$" + frame["Weight"].map({"k": "k", "beta": r"\beta", "lam": r"\lambda", "alpha": r"\alpha"}) \
+            + " = " + frame["Value"].map(lambda v: f"{v:g}") + "$"
         write_table(table_dir, "table_sweep", frame.drop(columns="Value"), label="tab:sweep", bold_best=False,
                     caption="QUBO sensitivity: validation macro-F1 of the six-group age head when one weight changes and the "
-                            "others keep their default values (k 25, beta 0.05, lambda 1.5, alpha 1; mean and standard deviation over five seeds).")
+                            r"others keep their default values ($k=25$, $\beta=0.05$, $\lambda=1.5$, $\alpha=1$; mean and "
+                            "standard deviation (SD) over five seeds).")
     return numbers
 
 
@@ -409,7 +490,7 @@ def step2_outputs(step2_dir, fig_dir, table_dir):
                 if a.empty:
                     continue
                 rows.append({"Setting": f"{scheme} classes, {SHOWN.get(model, model)}: {method}",
-                             "macro-F1": a["macro_f1"].mean(), "Balanced": a["balanced"].mean(),
+                             "Macro-F1": a["macro_f1"].mean(), "Balanced": a["balanced"].mean(),
                              "Rare-group recall": a["rare_recall"].mean(), "+-1-bin": a["within_1"].mean(),
                              "Age ECE": a["ece"].mean(), "Gender AUC": g["auc"].mean()})
     write_table(table_dir, "table_oversampling", pd.DataFrame(rows), wide=True, label="tab:oversampling",
@@ -425,7 +506,7 @@ def step2_outputs(step2_dir, fig_dir, table_dir):
         for model in ("MTL", "Gradient Boosting"):
             for method in order[1:]:
                 row = {"Setting": f"{SHOWN.get(model, model)}: {method}"}
-                for measure, title in (("macro_f1", "macro-F1"), ("rare_recall", "Rare-group recall"), ("ece", "ECE")):
+                for measure, title in (("macro_f1", "Macro-F1"), ("rare_recall", "Rare-group recall"), ("ece", "ECE")):
                     r = part[(part["model"] == model) & (part["method"] == method) & (part["measure"] == measure)]
                     if r.empty:
                         row[title] = "-"
@@ -445,22 +526,23 @@ def step2_outputs(step2_dir, fig_dir, table_dir):
         names = step2.CLASS_NAMES[scheme]
         shown = [m for m in ("none", "SMOTE, earlier setting", "SMOTE-NC", "Borderline-SMOTE", "SMOTE-NC, full balance", "CTGAN")
                  if m in set(part["method"])]
-        fig, ax = plt.subplots(figsize=(7.2, 2.8))
+        fig, ax = new_figure(TWO_COLUMNS, 8)
         width = 0.8 / len(shown)
         for i, method in enumerate(shown):
             values = part[part["method"] == method][[f"recall {n}" for n in names]].mean()
             ax.bar(np.arange(len(names)) + (i - (len(shown) - 1) / 2) * width, values.values, width * 0.9,
-                   color=COLOURS[i % len(COLOURS)], label=method)
+                   color=COLOURS[i % len(COLOURS)], label=first_capital(method))
         ax.set_xticks(range(len(names)), names)
         ax.set_ylabel("Test recall")
-        ax.set_xlabel("Age group")
-        ax.legend(frameon=False, fontsize=7, ncol=3, loc="upper center", bbox_to_anchor=(0.5, 1.22))
+        ax.set_xlabel("Age group (years)")
+        fig.legend(ncol=3, loc="outside upper center", handlelength=1.2, columnspacing=1.2)
         save(fig, fig_dir, f"fig_oversampling_recall_{scheme}class")
 
     # paired differences in rare-group recall and macro-F1 for every method
-    fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.2), sharey=True)
+    fig, axes = new_figure(TWO_COLUMNS, 10, columns=2, sharey=True)
     methods = order[1:]
-    for ax, measure, title in ((axes[0], "rare_recall", "(a) Rare-group recall"), (axes[1], "macro_f1", "(b) macro-F1")):
+    markers = ["o", "s", "^", "D"]       # each series has its own marker as well as its own colour
+    for ax, measure, title in ((axes[0], "rare_recall", "(a) Rare-group recall"), (axes[1], "macro_f1", "(b) Macro-F1")):
         for k, (scheme, model) in enumerate((("6", "MTL"), ("10", "MTL"), ("6", "Gradient Boosting"), ("10", "Gradient Boosting"))):
             part = paired[(paired["scheme"] == scheme) & (paired["model"] == model) & (paired["measure"] == measure)
                           & (paired["task"] == "age")].set_index("method")
@@ -470,26 +552,25 @@ def step2_outputs(step2_dir, fig_dir, table_dir):
                 if v is None:
                     continue
                 ax.plot([v["low"], v["high"]], [yy, yy], color=COLOURS[k], lw=1.2)
-                ax.plot(v["difference"], yy, "o", color=COLOURS[k], ms=4,
+                ax.plot(v["difference"], yy, markers[k], color=COLOURS[k], ms=4,
                         label=f"{scheme} classes, {SHOWN.get(model, model)}" if yy == y[0] else None)
-        ax.axvline(0, color=GREY, lw=0.8)
-        ax.set_title(title, loc="left")
+        ax.axvline(0, color=BLACK, lw=1.0)
+        ax.set_title(title)
         ax.set_xlabel("Difference from no oversampling")
-    axes[0].set_yticks(range(len(methods)), methods, fontsize=7)
+    axes[0].set_yticks(range(len(methods)), [first_capital(m) for m in methods])
     axes[0].invert_yaxis()
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, frameon=False, fontsize=7, ncol=4, loc="upper center", bbox_to_anchor=(0.5, 1.04))
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.legend(handles, labels, ncol=2, loc="outside upper center", handlelength=1.2, columnspacing=1.5)
     save(fig, fig_dir, "fig_oversampling_paired")
 
     quality = records.groupby(["scheme", "method"])[["rows_added", "seconds", "male_share_before", "male_share_after",
                                                      "distance_ratio", "discriminator_auc"]].mean().reset_index()
     quality = quality[quality["method"] != "none"]
     frame = pd.DataFrame({"Setting": quality["scheme"] + " classes: " + quality["method"],
-                          "Rows added": quality["rows_added"].round(0).astype(int).astype(str),
+                          "Rows added": quality["rows_added"].round(0).astype(int).map("{:,}".format),
                           "Male share before": quality["male_share_before"], "Male share after": quality["male_share_after"],
                           "Distance ratio": quality["distance_ratio"], "Discriminator AUC": quality["discriminator_auc"],
-                          "Seconds": quality["seconds"].round(1).astype(str)})
+                          "Time (s)": quality["seconds"].map("{:,.1f}".format)})
     write_table(table_dir, "table_synthetic_rows", frame, label="tab:synthetic", wide=True,
                 caption="What each method adds to the training rows (mean over five seeds). Distance ratio: distance from a new row "
                         "to the closest real row of its class, divided by the same distance between real rows (0 = copies). "
@@ -512,14 +593,16 @@ def step3_outputs(step3_dir, table_dir):
     means = pd.read_csv(step3_dir / "means.csv")
     order = ["Logistic Regression", "Random Forest", "Gradient Boosting", "MTL (age head)"]
     base = means[means["method"] == "none"].set_index("model").reindex(order).reset_index()
-    frame = pd.DataFrame({"Model": base["model"].replace({"MTL (age head)": "MTL, age head (proposed)"}),
-                          "Accuracy": base["accuracy mean"], "+-1-bin": base["within_1 mean"], "macro-F1": base["macro_f1 mean"],
+    shown = {**SHOWN, "MTL (age head)": "MTL, age head (proposed)"}
+    frame = pd.DataFrame({"Model": base["model"].map(lambda m: shown.get(m, m)),
+                          "Accuracy": base["accuracy mean"], "+-1-bin": base["within_1 mean"], "Macro-F1": base["macro_f1 mean"],
                           "Balanced": base["balanced mean"], "AUC OvR": base["auc_ovr mean"], "ECE": base["ece mean"]})
     write_table(table_dir, "table_iranian", frame, bold_best=True, lower_better=("ECE",), label="tab:iranian", wide=True,
                 caption="External check on Iranian Churn: five age groups, no gender (test rows, mean over five seeds).")
     over = means[means["method"] != "none"].copy()
-    frame2 = pd.DataFrame({"Setting": over["model"].str.replace("MTL (age head)", "MTL", regex=False) + ": " + over["method"],
-                           "macro-F1": over["macro_f1 mean"], "Balanced": over["balanced mean"],
+    names = {**SHOWN, "MTL (age head)": "MTL"}
+    frame2 = pd.DataFrame({"Setting": over["model"].map(lambda m: names.get(m, m)) + ": " + over["method"],
+                           "Macro-F1": over["macro_f1 mean"], "Balanced": over["balanced mean"],
                            "Rare-group recall": over["rare_recall mean"], "ECE": over["ece mean"]})
     write_table(table_dir, "table_iranian_oversampling", frame2, label="tab:iranian_os",
                 caption="Oversampling on Iranian Churn (test rows, mean over five seeds).")
@@ -534,14 +617,14 @@ def scheme_tables(step1_dir, step2_dir, table_dir):
         s2 = pd.read_csv(Path(step2_dir) / "scores.csv", dtype={"scheme": str})
         smote = s2[(s2["model"] == "MTL") & (s2["task"] == "age") & (s2["method"] == "SMOTE, earlier setting")]
     out = {}
-    layouts = {"10": [("accuracy", "Accuracy"), ("within_1", "+-1-bin"), ("macro_f1", "macro-F1"), ("balanced", "Balanced"),
-                      ("weighted_f1", "weighted-F1"), ("auc_ovr", "AUC OvR"), ("ece", "ECE")],
-               "48": [("accuracy", "Exact Accuracy"), ("macro_f1", "macro-F1"), ("balanced", "Balance"),
+    layouts = {"10": [("accuracy", "Accuracy"), ("within_1", "+-1-bin"), ("macro_f1", "Macro-F1"), ("balanced", "Balanced"),
+                      ("weighted_f1", "Weighted-F1"), ("auc_ovr", "AUC OvR"), ("ece", "ECE")],
+               "48": [("accuracy", "Exact accuracy"), ("macro_f1", "Macro-F1"), ("balanced", "Balance"),
                       ("within_5", "+-5-year tolerance")]}
-    captions = {"10": "10-class Age Formulation on the LAT data (mean over 5 seeds) where best per column is shown in "
-                      "\\textbf{bold}. $\\pm1$-bin: adjacent-class tolerance; AUC OvR: One-v-Rest ROC curve; ECE: Expected "
-                      "Calibration Error.",
-                "48": "48-class (one year) Age Formulation on the LAT dataset (mean over 5 seeds). The $\\pm5$-year tolerance "
+    captions = {"10": "10-class age formulation on the LAT data (mean over 5 seeds) where best per column is shown in "
+                      "\\textbf{bold}. $\\pm1$-bin: adjacent-class tolerance; AUC OvR: one-vs-rest area under the ROC curve; "
+                      "ECE: Expected Calibration Error.",
+                "48": "48-class (one year) age formulation on the LAT dataset (mean over 5 seeds). The $\\pm5$-year tolerance "
                       "is the metric comparable with Kuang et al.'s $78\\%$ that employed high-dimensional temporal features."}
     for scheme, layout in layouts.items():
         if not (Path(step1_dir) / f"scores_{scheme}class.csv").exists():

@@ -11,6 +11,13 @@ share within +-5 years and mean absolute error).
 
 ## Figures (`figures/`, PDF + PNG, with the plotted values as CSV where useful)
 
+The figures follow the journal's rules: Times New Roman at 10 pt for every word and number, bold black axes,
+black reference lines, 600 dpi, and a printed width of 8 cm (one column) or 16 cm (two columns). They are
+saved at that size, so the article includes them without scaling. Labels have only the first word
+capitalized, attribute names are written out (`SOCIAL_NETWORK_MB` becomes "Social network (MB)"), and
+counts carry a comma between groups of three digits. The ten-group confusion matrix shows the percentage of
+each true group only; the counts are in its CSV file.
+
 | File | Content |
 |---|---|
 | `fig_data_distribution` | gender and six age groups of LAT |

@@ -1,6 +1,8 @@
 % The research methodology as a diagram (TikZ). Build: pdflatex methodology.tex
+% Drawn 16 cm wide with 10 pt text, the size the journal asks for, so the article includes it unscaled.
 \documentclass[border=2pt]{standalone}
 \usepackage{newtxtext,newtxmath}
+\usepackage{bm}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,calc}
 
@@ -13,20 +15,20 @@
 \definecolor{band}{RGB}{245,245,245}
 
 \tikzset{
-  stage/.style={draw=edge, line width=0.6pt, rounded corners=2pt, fill=#1, text width=3.08cm,
-                align=left, anchor=north west, inner sep=4pt,
-                font=\footnotesize\linespread{0.95}\selectfont, text=ink},
-  title/.style={fill=head, text=white, font=\footnotesize\bfseries, minimum width=3.24cm,
-                minimum height=0.55cm, inner sep=2pt, anchor=south west, rounded corners=2pt},
-  flow/.style={-{Latex[length=2.2mm]}, line width=0.9pt, draw=edge},
+  stage/.style={draw=edge, line width=0.6pt, rounded corners=2pt, fill=#1, text width=2.62cm,
+                align=left, anchor=north west, inner sep=3.5pt,
+                font=\normalsize\linespread{0.92}\selectfont, text=ink},
+  title/.style={fill=head, text=white, font=\normalsize\bfseries, minimum width=2.9cm,
+                minimum height=0.6cm, inner sep=2pt, anchor=south west, rounded corners=2pt},
+  flow/.style={-{Latex[length=1.8mm]}, line width=0.9pt, draw=edge},
 }
 \newcommand{\pt}{\textbullet\ }
-\newcommand{\stagebox}[1]{\parbox[t][5.5cm][t]{\linewidth}{\raggedright\hyphenpenalty=10000 #1}}
+\newcommand{\stagebox}[1]{\parbox[t][9.6cm][t]{\linewidth}{\raggedright\hyphenpenalty=10000 #1}}
 \newcommand{\gap}{\par\vspace{3pt}}
 
 \begin{document}
 \begin{tikzpicture}
-\foreach \i in {1,...,5} { \coordinate (c\i) at ({(\i-1)*3.62},0); }
+\foreach \i in {1,...,5} { \coordinate (c\i) at ({(\i-1)*3.275},0); }
 
 \node[stage=fillA] (s1) at (c1) {\stagebox{
 \textbf{LAT} (public, aggregated)\\
@@ -51,11 +53,12 @@
 \node[title] at ($(s2.north west)+(0,0.08)$) {2. Preprocessing};
 
 \node[stage=fillB] (s3) at (c3) {\stagebox{
-\pt relevance $R_i$ and redundancy $Q_{ij}$: mutual information with the joint label $g\,N_{age}{+}a$\\
+\pt relevance $R_i$ and redundancy $Q_{ij}$: mutual information with the joint label $g\,N_{\mathrm{age}}{+}a$\\
 \pt energy to minimize:\\[2pt]
-\hspace*{0.2em}$E(\mathbf{x})=-\alpha\textstyle\sum_i R_i x_i$\\
-\hspace*{1.9em}$+\,\beta\textstyle\sum_{i<j} Q_{ij}x_ix_j$\\
-\hspace*{1.9em}$+\,\lambda\big(\textstyle\sum_i x_i-k\big)^2$\\[2pt]
+\hspace*{0.2em}$E(\bm{x})=$\\
+\hspace*{0.6em}$-\alpha\textstyle\sum_i R_i x_i$\\
+\hspace*{0.6em}$+\beta\textstyle\sum_{i<j}\!Q_{ij}x_ix_j$\\
+\hspace*{0.6em}$+\lambda\big(\textstyle\sum_i x_i-k\big)^2$\\[2pt]
 \pt $\alpha=1$, $\beta=0.05$, $\lambda=1.5$\\
 \pt simulated annealing on a CPU\\
 \pt $k=25$ on LAT; on IC, $k$ chosen by validation macro-F1}};
@@ -66,7 +69,7 @@
 \pt shared trunk $k\to64\to32$\\
 \pt gender head (sigmoid)\\
 \pt age head also fed the detached gender probability (softmax)\\
-\pt loss $2\mathcal{L}_{gender}+\mathcal{L}_{age}$\\
+\pt loss $2\mathcal{L}_{\mathrm{gender}}+\mathcal{L}_{\mathrm{age}}$\\
 \pt AdamW, cosine rate, 150 epochs; best validation loss kept\gap
 \textbf{Baselines} on the same attributes\\
 \pt logistic regression\\
@@ -91,7 +94,7 @@
   \draw[flow] (\a.east) -- (\b.west);
 
 \path let \p1=(s1.south west), \p2=(s5.south east) in
-  node[draw=edge, fill=band, rounded corners=2pt, font=\footnotesize, text=ink, inner sep=4pt,
+  node[draw=edge, fill=band, rounded corners=2pt, font=\normalsize, text width=15.3cm, text=ink, inner sep=4pt,
        minimum width=\x2-\x1, anchor=north west, align=center] at ($(\p1)+(0,-0.2)$)
   {No leakage: every transform, the feature selection and every model are fitted on the training split;
    the test split is used once, at the end of each run.};
