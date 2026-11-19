@@ -35,7 +35,8 @@ downloaded by Step 0, and Iranian Churn (UCI 563, doi 10.24432/C5JW3Z, CC BY 4.0
 3. Use **Save Version -> Save & Run All**.
 
 The plots and tables come from `agender_mtl/figures.py`, called by the Step F notebook; the methodology
-diagram is drawn in TikZ (`diagrams/methodology.tex`, build it with `pdflatex`).
+diagram is drawn in TikZ (`diagrams/methodology.tex`, build it with `pdflatex`), and the QUBO selection and
+network diagrams by `python diagrams/draw_diagrams.py OUTPUT_FOLDER`.
 
 Every number and figure is written by the notebooks; no result is typed by hand. Settings are chosen on the
 validation split, and the test split is scored once per seed.
@@ -55,7 +56,7 @@ agender_mtl/   the package: data, benchmark (preprocessing, models, age schemes,
 notebooks/     one Kaggle notebook per step
 tests/         offline tests
 docs/          one note per step and the data note
-diagrams/      the methodology diagram (TikZ)
+diagrams/      the methodology diagram (TikZ) and the QUBO and network diagrams (matplotlib)
 ```
 
 ## Licence
